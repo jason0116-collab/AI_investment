@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Productivity Investment Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root{
+    --bg:#0B1220; --panel:#111A2C; --panel2:#0E1626; --line:#1E2A44;
+    --txt:#E8EDF7; --muted:#8A94AD; --faint:#5A6480;
+    --green:#34D399; --yellow:#FBBF24; --red:#F87171; --blue:#5B8DEF;
+    --green-bg:rgba(52,211,153,.12); --yellow-bg:rgba(251,191,36,.12); --red-bg:rgba(248,113,113,.12);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--txt);font-family:'IBM Plex Sans KR',sans-serif;font-size:14px;line-height:1.55}
+  .mono{font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums}
+  .wrap{max-width:1240px;margin:0 auto;padding:20px 20px 60px}
+
+  header{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;padding:8px 0 18px;border-bottom:1px solid var(--line)}
+  header h1{font-size:19px;font-weight:700;letter-spacing:.2px}
+  #status{font-size:12px;color:var(--muted)}
+  #status.err{color:var(--red)}
+  .err-panel{width:100%;margin-top:8px;background:var(--red-bg);border:1px solid rgba(248,113,113,.35);border-radius:8px;padding:10px 12px;font-size:11.5px;color:var(--txt)}
+  .err-panel b{color:var(--red);display:block;margin-bottom:5px;font-size:12px}
+  .err-panel ul{margin:0;padding-left:16px;line-height:1.7}
+  .err-panel .mono{color:var(--muted)}
+
+  .hero{display:grid;grid-template-columns:230px 1fr;gap:24px;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:24px;margin:20px 0}
+  .gauge{position:relative;width:190px;height:190px;margin:auto}
+  .gauge svg{transform:rotate(-90deg)}
+  .gauge .num{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+  .gauge .num b{font-size:44px;font-weight:600;line-height:1}
+  .gauge .num span{font-size:11px;color:var(--muted);margin-top:4px}
+  .hero-body{display:flex;flex-direction:column;justify-content:center;gap:12px}
+  .decision-row{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  .decision{font-size:30px;font-weight:700;letter-spacing:1px;padding:4px 18px;border-radius:10px}
+  #summaryMsg{font-size:14px;color:var(--txt);background:var(--panel2);border-left:3px solid var(--blue);border-radius:0 10px 10px 0;padding:12px 16px;max-width:760px}
+  .eq-weight{font-size:13px;color:var(--muted)}
+  .eq-weight b{font-size:16px;color:var(--txt)}
+  .cov-note{font-size:11.5px;color:var(--faint)}
+
+  section{margin:28px 0}
+  section>h2{font-size:15px;font-weight:600;color:var(--txt);margin-bottom:12px;display:flex;align-items:baseline;gap:10px}
+  section>h2 small{font-size:12px;font-weight:400;color:var(--faint)}
+
+  .fw-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+  .fw-card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+  .fw-card .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+  .fw-card .name{font-size:13px;font-weight:600}
+  .dot{width:10px;height:10px;border-radius:50%}
+  .dot.green{background:var(--green);box-shadow:0 0 8px var(--green)}
+  .dot.yellow{background:var(--yellow);box-shadow:0 0 8px var(--yellow)}
+  .dot.red{background:var(--red);box-shadow:0 0 8px var(--red)}
+  .dot.gray{background:var(--faint)}
+  .fw-card .metric{font-size:12px;color:var(--muted);min-height:34px}
+  .fw-card .action{font-size:12px;font-weight:600;margin-top:8px}
+  .fw-card .action.green{color:var(--green)} .fw-card .action.yellow{color:var(--yellow)} .fw-card .action.red{color:var(--red)} .fw-card .action.gray{color:var(--faint)}
+
+  table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  th,td{padding:9px 12px;text-align:left;border-bottom:1px solid var(--line);font-size:12.5px}
+  th{color:var(--muted);font-weight:500;background:var(--panel2)}
+  tr:last-child td{border-bottom:none}
+  td.num,th.num{text-align:right}
+  .lv{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:600}
+  .lv.bull{color:var(--green);background:var(--green-bg)}
+  .lv.neutral{color:var(--yellow);background:var(--yellow-bg)}
+  .lv.bear{color:var(--red);background:var(--red-bg)}
+  .lv.na{color:var(--faint);background:rgba(90,100,128,.12)}
+  .src{font-size:11px;color:var(--faint)}
+  tr.na-row td{opacity:.5}
+
+  .chart-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .chart-card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
+  .chart-card h3{font-size:13px;font-weight:600;margin-bottom:4px}
+  .chart-card .cap{font-size:11.5px;color:var(--muted);margin-bottom:10px}
+  .chart-box{position:relative;height:220px}
+  .chart-box.tall{height:300px}
+
+  .rim-grid{display:grid;grid-template-columns:280px 1fr;gap:14px}
+  .rim-inputs{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
+  .rim-inputs h3{font-size:13px;margin-bottom:10px}
+  .kv{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px dashed var(--line);font-size:12.5px}
+  .kv:last-child{border-bottom:none}
+  .kv span{color:var(--muted)}
+  .kv b{font-family:'IBM Plex Mono',monospace}
+  .rim-t{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px}
+  .rim-t h4{font-size:12.5px;margin-bottom:8px}
+  .rim-t table{border:none}
+  .rim-t td,.rim-t th{padding:6px 8px;font-size:11.5px}
+  .rim-summary{margin-top:12px;display:flex;gap:24px;flex-wrap:wrap;background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:14px 18px}
+  .rim-summary .item b{display:block;font-size:18px}
+  .rim-summary .item span{font-size:11.5px;color:var(--muted)}
+  .up-pos{color:var(--green)} .up-neg{color:var(--red)}
+  .assumption-note{font-size:11px;color:var(--faint);margin-top:10px}
+
+  .cycle-strip{display:grid;grid-template-columns:repeat(11,1fr);gap:6px}
+  .cy{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 6px;text-align:center}
+  .cy .st{font-size:10px;font-weight:600;letter-spacing:.5px;margin-top:5px;display:block}
+  .cy .nm{font-size:11.5px;font-weight:600}
+  .cy.now{border-color:var(--green);background:var(--green-bg)} .cy.now .st{color:var(--green)}
+  .cy.entering{border-color:var(--yellow);background:var(--yellow-bg)} .cy.entering .st{color:var(--yellow)}
+  .cy.next .st{color:var(--blue)} .cy.future .st{color:var(--faint)}
+
+  .src-panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 18px;font-size:12px;color:var(--muted)}
+  .src-panel table{background:transparent;border:none;margin-top:8px}
+  .src-panel td,.src-panel th{font-size:11.5px;padding:5px 8px}
+
+  footer{margin-top:36px;padding-top:14px;border-top:1px solid var(--line);font-size:11.5px;color:var(--faint)}
+
+  @media (max-width:980px){
+    .fw-grid{grid-template-columns:repeat(2,1fr)}
+    .chart-grid,.rim-grid{grid-template-columns:1fr}
+    .hero{grid-template-columns:1fr}
+    .cycle-strip{grid-template-columns:repeat(4,1fr)}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>AI PRODUCTIVITY INVESTMENT DASHBOARD</h1>
+    <div id="status">데이터 로드 중…</div>
+  </header>
+  <div id="errPanel" class="err-panel" hidden></div>
+
+  <!-- 결정 스트립 -->
+  <div class="hero">
+    <div class="gauge">
+      <svg width="190" height="190" viewBox="0 0 190 190">
+        <circle cx="95" cy="95" r="82" fill="none" stroke="var(--line)" stroke-width="14"/>
+        <circle id="gaugeArc" cx="95" cy="95" r="82" fill="none" stroke="var(--green)" stroke-width="14"
+                stroke-linecap="round" stroke-dasharray="515" stroke-dashoffset="515"/>
+      </svg>
+      <div class="num"><b id="scoreNum" class="mono">–</b><span>Overall Score / 100</span></div>
+    </div>
+    <div class="hero-body">
+      <div class="decision-row">
+        <span class="decision" id="decisionBadge">–</span>
+        <span class="eq-weight">권장 주식 비중 <b id="eqWeight" class="mono">–</b></span>
+      </div>
+      <p id="summaryMsg">데이터를 불러오는 중입니다…</p>
+      <div class="eq-weight" id="lastUpdated"></div>
+      <div class="cov-note" id="covNote"></div>
+    </div>
+  </div>
+
+  <!-- 프레임워크 카드 -->
+  <section>
+    <h2>프레임워크 판단 <small>8개 영역 · 신호등 상태와 액션</small></h2>
+    <div class="fw-grid" id="fwGrid"></div>
+  </section>
+
+  <!-- 지표 상세 -->
+  <section>
+    <h2>지표 스코어보드 <small>모든 값은 공개 API에서 자동 수집 (수동 입력 없음)</small></h2>
+    <table id="indTable">
+      <thead><tr>
+        <th>구분</th><th>지표</th><th class="num">현재값</th><th>기준 (Bull / Neutral / Bear)</th>
+        <th>신호</th><th class="num">가중치</th><th class="num">기여점수</th><th>소스</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  <!-- 차트 -->
+  <section>
+    <h2>시장 모니터링 <small>최근 1년</small></h2>
+    <div class="chart-grid">
+      <div class="chart-card">
+        <h3>미국 10년물 국채금리 · Fed Rule 적정 PER</h3>
+        <div class="cap" id="fedRuleCap">적정 PER = 1 ÷ 10Y 금리</div>
+        <div class="chart-box"><canvas id="chRates"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <h3>VIX (변동성)</h3>
+        <div class="cap">20 이하 안정 · 30 이상 위험</div>
+        <div class="chart-box"><canvas id="chVix"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <h3>지수 상대 성과 (1년 전 = 100)</h3>
+        <div class="cap">XLK · SOXX · S&P 500 · KOSPI</div>
+        <div class="chart-box"><canvas id="chIdx"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <h3>점수 기여도 분해</h3>
+        <div class="cap">지표별 가중 기여 = 신호점수 × 가중치 ÷ 유효가중치 합</div>
+        <div class="chart-box tall"><canvas id="chContrib"></canvas></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- RIM -->
+  <section>
+    <h2>RIM 적정가치 <small id="rimSub">FV = BPS × (ROE − g) ÷ (COE − g), COE = 무위험금리 + 리스크프리미엄 — BPS·ROE·현재가·무위험금리는 자동 수집</small></h2>
+    <div class="rim-grid">
+      <div class="rim-inputs">
+        <h3 id="rimTitle">대상 종목</h3>
+        <div class="kv"><span>현재가</span><b id="rimPrice" class="mono">–</b></div>
+        <div class="kv"><span>BPS (주당순자산)</span><b id="rimBps" class="mono">–</b></div>
+        <div class="kv"><span>PER / PBR</span><b id="rimPerPbr" class="mono">–</b></div>
+        <div class="kv"><span>ROE (PBR÷PER)</span><b id="rimRoe" class="mono">–</b></div>
+        <div class="kv"><span>무위험금리 (한국 국고채 10Y)</span><b id="rimRf" class="mono">–</b></div>
+        <div class="assumption-note">영구성장률 g·리스크프리미엄은 표준 가정값을 사용합니다 (수집 데이터 아님, 모델 파라미터).</div>
+      </div>
+      <div>
+        <div class="rim-t" id="rimTable"></div>
+        <div class="rim-summary" id="rimSummary"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- AI 사이클 -->
+  <section>
+    <h2>AI 사이클 맵 <small>현재 투자 사이클 위치 (프레임워크 참고용)</small></h2>
+    <div class="cycle-strip" id="cycleStrip"></div>
+  </section>
+
+  <!-- 데이터 소스 -->
+  <section>
+    <h2>데이터 소스 <small>전량 자동 수집 — 수동 입력 없음</small></h2>
+    <div class="src-panel">
+      매일 GitHub Actions가 collect.py를 실행해 아래 소스에서 직접 값을 가져오고, 이 페이지는 그 결과(data.json)만 읽습니다.
+      <table>
+        <thead><tr><th>소스</th><th>지표</th><th>비고</th></tr></thead>
+        <tbody>
+          <tr><td>FRED</td><td>10Y 금리·VIX·Core PCE·침체확률·노동생산성·미국/한국 가계부채·미국 기업신용</td><td>공식 API(선택)/CSV(기본), 키 불필요</td></tr>
+          <tr><td>ECOS(한국은행)</td><td>기준금리·국고채 10년·CPI</td><td>인증키 필요</td></tr>
+          <tr><td>SEC EDGAR</td><td>Hyperscaler(MSFT·GOOGL·AMZN·META) CAPEX, Micron 매출</td><td>연간(10-K) 기준, 무료·키 불필요</td></tr>
+          <tr><td>pykrx</td><td>KOSPI EPS·배당수익률·기술적 추세, RIM 종목 펀더멘털</td><td>한국거래소 공식 데이터</td></tr>
+          <tr><td>yfinance</td><td>XLK·SOXX·S&P500 가격, QQQ 내재 이익성장률</td><td>trailingPE/forwardPE 근사</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer id="footerNote">
+    본 대시보드는 투자 판단 보조 도구이며 특정 종목의 매수·매도 권유가 아닙니다.
+  </footer>
+</div>
+
+<script>
+"use strict";
+
+/* ═══════════════════════════════════════════════
+   지표 정의 — 전부 data.json 필드에서 값을 읽음 (수동 입력 없음)
+   결측(null)이면 점수 계산에서 자동 제외되고 표에 N/A로 표시됨
+   ═══════════════════════════════════════════════ */
+const IND = [
+  { key:"productivity", cat:"Macro", name:"미국 노동생산성 증가율", unit:"%", weight:8, fw:"productivity",
+    get:d=>d?.fred?.productivity?.value, rule:"> 2.0 / 1.0~2.0 / < 1.0",
+    level:v=> v>2 ? "bull" : v>=1 ? "neutral" : "bear", source:"FRED (OPHNFB)" },
+  { key:"corePce", cat:"Macro", name:"Core PCE 인플레이션 (YoY)", unit:"%", weight:8, fw:"rates",
+    get:d=>d?.fred?.corePce?.value, rule:"2.0~3.0 / 3.0~4.0 또는 <2.0 / > 4.0",
+    level:v=> (v>=2&&v<=3) ? "bull" : v>4 ? "bear" : "neutral", source:"FRED (PCEPILFE)" },
+  { key:"us10y", cat:"Macro", name:"미국 10년물 국채금리", unit:"%", weight:7, fw:"rates",
+    get:d=>d?.fred?.us10y?.value, rule:"3.5~4.5 / 4.5~5.0 또는 <3.5 / > 5.0",
+    level:v=> (v>=3.5&&v<=4.5) ? "bull" : v>5 ? "bear" : "neutral", source:"FRED (DGS10)" },
+  { key:"recessionProb", cat:"Macro", name:"미국 경기침체 확률", unit:"%", weight:10, fw:"macro",
+    get:d=>d?.fred?.recessionProb?.value, rule:"< 15 / 15~30 / > 30",
+    level:v=> v<15 ? "bull" : v<=30 ? "neutral" : "bear", source:"FRED (RECPROUSM156N)" },
+  { key:"vix", cat:"Macro", name:"VIX", unit:"", weight:5, fw:"macro",
+    get:d=>d?.fred?.vix?.value, rule:"< 20 / 20~30 / > 30",
+    level:v=> v<20 ? "bull" : v<=30 ? "neutral" : "bear", source:"FRED (VIXCLS)" },
+  { key:"usHouseholdDebt", cat:"Debt", name:"미국 가계부채/GDP", unit:"%", weight:6, fw:"debt",
+    get:d=>d?.fred?.usHouseholdDebt?.value, rule:"< 75 / 75~90 / > 90",
+    level:v=> v<75 ? "bull" : v<=90 ? "neutral" : "bear", source:"FRED (HDTGPDUSQ163N)" },
+  { key:"krHouseholdDebt", cat:"Debt", name:"한국 가계부채/GDP", unit:"%", weight:6, fw:"debt",
+    get:d=>d?.fred?.krHouseholdDebt?.value, rule:"< 75 / 75~90 / > 90",
+    level:v=> v<75 ? "bull" : v<=90 ? "neutral" : "bear", source:"FRED (HDTGPDKRQ163N)" },
+  { key:"corpDebtUS", cat:"Debt", name:"미국 비금융기업 신용/GDP", unit:"%", weight:6, fw:"debt",
+    get:d=>d?.fred?.corpDebtUS?.value, rule:"< 75 / 75~90 / > 90 (BIS 정의 기준)",
+    level:v=> v<75 ? "bull" : v<=90 ? "neutral" : "bear", source:"FRED/BIS (QUSNAM770A)" },
+  { key:"krBaseRate", cat:"Korea", name:"한국 기준금리", unit:"%", weight:0, fw:"rates",
+    get:d=>d?.ecos?.krBaseRate?.value, rule:"참고 지표 (점수 미반영)",
+    level:()=> "neutral", source:"ECOS (722Y001)" },
+  { key:"krTreasury10y", cat:"Korea", name:"한국 국고채 10년", unit:"%", weight:4, fw:"rates",
+    get:d=>d?.ecos?.krTreasury10y?.value, rule:"< 2.8 / 2.8~3.6 / > 3.6",
+    level:v=> v<2.8 ? "bull" : v<=3.6 ? "neutral" : "bear", source:"ECOS (817Y002)" },
+  { key:"krCpi", cat:"Korea", name:"한국 CPI 상승률 (YoY)", unit:"%", weight:4, fw:"rates",
+    get:d=>d?.ecos?.krCpi?.value, rule:"1.5~2.5 / 나머지 / > 3.5",
+    level:v=> (v>=1.5&&v<=2.5) ? "bull" : v>3.5 ? "bear" : "neutral", source:"ECOS (901Y009)" },
+  { key:"nasdaqEps", cat:"Earnings", name:"Nasdaq(QQQ) 내재 이익성장률", unit:"%", weight:10, fw:"earnings",
+    get:d=>d?.nasdaqEps?.value, rule:"> 20 / 10~20 / < 10",
+    level:v=> v>20 ? "bull" : v>=10 ? "neutral" : "bear", source:"yfinance (trailingPE/forwardPE)" },
+  { key:"kospiEps", cat:"Earnings", name:"KOSPI EPS 증가율", unit:"%", weight:8, fw:"earnings",
+    get:d=>d?.krx?.kospiEps?.value, rule:"> 20 / 10~20 / < 10",
+    level:v=> v>20 ? "bull" : v>=10 ? "neutral" : "bear", source:"pykrx (지수 PER)" },
+  { key:"capex", cat:"AI Cycle", name:"Hyperscaler CAPEX 증가율", unit:"%", weight:10, fw:"aicycle",
+    get:d=>d?.sec?.capex?.value, rule:"> 20 / 10~20 / < 10",
+    level:v=> v>20 ? "bull" : v>=10 ? "neutral" : "bear", source:"SEC EDGAR (연간 10-K 합산)" },
+  { key:"hbm", cat:"AI Cycle", name:"Micron 매출 YoY (HBM 수요 근사)", unit:"%", weight:10, fw:"aicycle",
+    get:d=>d?.sec?.hbmProxy?.value, rule:"> 30 / 10~30 / < 10",
+    level:v=> v>30 ? "bull" : v>=10 ? "neutral" : "bear", source:"SEC EDGAR (Micron 연간 매출)" },
+  { key:"perVsFair", cat:"Valuation", name:"현재가 ÷ RIM 적정가", unit:"x", weight:8, fw:"valuation",
+    get:d=> (d?.rimFairValue?.avgFairValue && d.rimFairValue.avgFairValue>0) ? d.rimFairValue.price/d.rimFairValue.avgFairValue : null,
+    rule:"< 1.0 / 1.0~1.2 / > 1.2",
+    level:v=> v<1 ? "bull" : v<=1.2 ? "neutral" : "bear", source:"RIM 모델 (pykrx 자동)" },
+  { key:"shReturn", cat:"환원", name:"KOSPI 배당수익률", unit:"%", weight:5, fw:"shareholder",
+    get:d=>d?.krx?.kospiDividendYield?.value, rule:"≥ 3 / 1~3 / < 1",
+    level:v=> v>=3 ? "bull" : v>=1 ? "neutral" : "bear", source:"pykrx (지수 펀더멘털)" },
+  { key:"technical", cat:"기술적", name:"KOSPI 기술적 추세", unit:"", weight:3, fw:"shareholder",
+    get:d=>d?.krx?.technical?.value, rule:"1 긍정(신고가·MA위) / 0 중립 / -1 부정",
+    level:v=> v>=1 ? "bull" : v<=-1 ? "bear" : "neutral", source:"pykrx (200일선/52주 고저)" },
+];
+const LEVEL_PTS = { bull:100, neutral:60, bear:20 };
+
+const FRAMEWORKS = [
+  { key:"productivity", name:"Productivity",     driver:"AI 주도 생산성 개선" },
+  { key:"macro",        name:"Macro / Recession",driver:"침체 없음 = Risk-on" },
+  { key:"rates",        name:"Liquidity / Rates",driver:"할인율·물가 환경" },
+  { key:"debt",         name:"Debt Capacity",    driver:"국가별 부채 흡수 여력" },
+  { key:"earnings",     name:"Earnings Growth",  driver:"EPS 가속 여부" },
+  { key:"valuation",    name:"Valuation",        driver:"RIM 적정가 대비" },
+  { key:"aicycle",      name:"AI Cycle",         driver:"CAPEX · HBM 사이클" },
+  { key:"shareholder",  name:"Return / Trend",   driver:"배당수익률 · 추세 확인" },
+];
+
+const CYCLE = [
+  ["GPU","now"],["HBM","now"],["Memory","now"],["Network","entering"],["Data Center","entering"],
+  ["Cloud","next"],["Software","next"],["Agent","next"],["Robot","future"],["Healthcare","future"],["Physical AI","future"]
+];
+const CYCLE_LABEL = { now:"NOW", entering:"ENTERING", next:"NEXT", future:"FUTURE" };
+
+let apiData = null;
+let charts = {};
+
+function fmt(v, unit){
+  if (!Number.isFinite(v)) return "–";
+  const s = Math.abs(v) >= 100 ? v.toFixed(1) : v.toFixed(2);
+  return s + (unit || "");
+}
+const cssVar = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+/* ═══════════════════════════════════════════════
+   점수 엔진 — 결측 지표는 분자·분모 모두에서 제외 (가짜 값으로 채우지 않음)
+   ═══════════════════════════════════════════════ */
+function evaluate(){
+  const rows = [];
+  let wSum = 0, sSum = 0, missingWeight = 0, totalWeight = 0;
+
+  for (const ind of IND){
+    const raw = ind.get(apiData);
+    const value = Number.isFinite(raw) ? raw : null;
+    totalWeight += ind.weight;
+    if (value === null){
+      rows.push({ ...ind, value:null, lv:"na", pts:null, contrib:0 });
+      missingWeight += ind.weight;
+      continue;
+    }
+    const lv = ind.level(value);
+    const pts = LEVEL_PTS[lv];
+    wSum += ind.weight; sSum += pts * ind.weight;
+    rows.push({ ...ind, value, lv, pts, contrib:0 });
+  }
+  const score = wSum > 0 ? sSum / wSum : null;
+  rows.forEach(r => { if (r.pts !== null) r.contrib = r.pts * r.weight / wSum; });
+
+  let decision="DATA 부족", color="gray", eq="–";
+  if (score !== null){
+    if (score >= 85)      { decision="STRONG BUY"; color="green";  eq="85~95%"; }
+    else if (score >= 70) { decision="BUY";        color="green";  eq="75~85%"; }
+    else if (score >= 55) { decision="HOLD";       color="yellow"; eq="55~70%"; }
+    else if (score >= 40) { decision="REDUCE";     color="yellow"; eq="35~55%"; }
+    else                  { decision="SELL";       color="red";    eq="< 35%";  }
+  }
+
+  const fw = FRAMEWORKS.map(f => {
+    const members = rows.filter(r => r.fw === f.key && r.pts !== null);
+    if (!members.length) return { ...f, status:"gray", action:"데이터 없음", detail:"수집 실패" };
+    const w = members.reduce((a,m)=>a+m.weight,0) || 1;
+    const p = members.reduce((a,m)=>a+m.pts*m.weight,0) / w;
+    const st = p >= 80 ? "green" : p >= 50 ? "yellow" : "red";
+    const action = st==="green" ? "Increase / Hold" : st==="yellow" ? "Selective Accumulate" : "Reduce";
+    const detail = members.map(m=>`${m.name.split(" ")[0]} ${fmt(m.value, m.unit)}`).slice(0,2).join(" · ");
+    return { ...f, status: st, action, detail };
+  });
+
+  return { rows, score, decision, color, eq, fw, missingWeight, totalWeight };
+}
+
+function summaryText(r){
+  if (r.score === null) return "자동 수집된 지표가 부족해 점수를 계산할 수 없습니다. data.json 갱신 상태를 확인하세요.";
+  if (r.score >= 70){
+    return "현재 시장은 AI 생산성 사이클, 이익 증가율, 금리 환경을 고려할 때 주식 비중 확대가 가능한 구간입니다. " +
+      "다만 밸류에이션 부담과 경기침체 위험이 상승할 경우 비중 조절이 필요합니다.";
+  }
+  if (r.score >= 55){
+    return "일부 지표가 중립 구간에 진입해 있어 신규 매수보다는 보유 중심의 대응이 적절합니다. " +
+      "이익 증가율과 AI CAPEX 사이클이 유지되는지 확인하며 선별적 비중 조절이 필요합니다.";
+  }
+  return "이익 증가율 둔화, 금리 상승, 경기침체 위험 확대가 동시에 나타나고 있어 주식 비중 축소가 필요합니다. " +
+    "AI 장기 사이클은 유효하나 단기적으로는 현금 비중 확대와 핵심 종목 중심의 압축 보유가 필요합니다.";
+}
+
+/* ═══════════════════════════════════════════════
+   렌더링
+   ═══════════════════════════════════════════════ */
+function render(){
+  const r = evaluate();
+
+  const arc = document.getElementById("gaugeArc");
+  const circ = 2 * Math.PI * 82;
+  arc.setAttribute("stroke-dasharray", circ);
+  const frac = r.score !== null ? r.score/100 : 0;
+  arc.setAttribute("stroke-dashoffset", circ * (1 - frac));
+  arc.setAttribute("stroke", cssVar("--" + r.color));
+  document.getElementById("scoreNum").textContent = r.score !== null ? r.score.toFixed(1) : "–";
+
+  const badge = document.getElementById("decisionBadge");
+  badge.textContent = r.decision;
+  badge.style.color = cssVar("--" + r.color);
+  badge.style.background = {green:"var(--green-bg)",yellow:"var(--yellow-bg)",red:"var(--red-bg)",gray:"rgba(90,100,128,.15)"}[r.color];
+  document.getElementById("eqWeight").textContent = r.eq;
+  document.getElementById("summaryMsg").textContent = summaryText(r);
+  document.getElementById("lastUpdated").textContent = apiData
+    ? `데이터 갱신: ${new Date(apiData.updated).toLocaleString("ko-KR")}`
+    : "";
+  const covered = r.totalWeight - r.missingWeight;
+  document.getElementById("covNote").textContent =
+    `지표 커버리지: 가중치 ${covered}/${r.totalWeight} 반영` + (r.missingWeight>0 ? ` (결측 ${r.missingWeight} 제외)` : "");
+
+  document.getElementById("fwGrid").innerHTML = r.fw.map(f => `
+    <div class="fw-card">
+      <div class="top"><span class="name">${f.name}</span><span class="dot ${f.status}"></span></div>
+      <div class="metric">${f.driver}<br><span class="src">${f.detail}</span></div>
+      <div class="action ${f.status}">${f.action}</div>
+    </div>`).join("");
+
+  document.querySelector("#indTable tbody").innerHTML = r.rows.map(x => `
+    <tr class="${x.lv==='na'?'na-row':''}">
+      <td>${x.cat}</td>
+      <td>${x.name}</td>
+      <td class="num mono">${x.value!==null ? fmt(x.value, x.unit) : "N/A"}</td>
+      <td class="src">${x.rule}</td>
+      <td><span class="lv ${x.lv}">${ {bull:"Bull",neutral:"Neutral",bear:"Bear",na:"N/A"}[x.lv] }</span></td>
+      <td class="num mono">${x.weight}</td>
+      <td class="num mono">${x.pts!==null ? x.contrib.toFixed(1) : "–"}</td>
+      <td><span class="src">${x.source}</span></td>
+    </tr>`).join("");
+
+  renderRim();
+  renderContrib(r.rows);
+  document.getElementById("cycleStrip").innerHTML = CYCLE.map(([nm, st]) =>
+    `<div class="cy ${st}"><span class="nm">${nm}</span><span class="st">${CYCLE_LABEL[st]}</span></div>`).join("");
+}
+
+function renderRim(){
+  const rim = apiData?.rimFairValue;
+  if (!rim){
+    document.getElementById("rimTable").innerHTML = "<p class='src'>RIM 데이터 없음 (pykrx 또는 국고채 10Y 수집 실패)</p>";
+    document.getElementById("rimSummary").innerHTML = "";
+    return;
+  }
+  document.getElementById("rimTitle").textContent = `${rim.name} (${rim.ticker})`;
+  document.getElementById("rimPrice").textContent = rim.price.toLocaleString() + "원";
+  document.getElementById("rimBps").textContent = rim.bps.toLocaleString() + "원";
+  document.getElementById("rimPerPbr").textContent = `${apiData?.krx?.rim?.per ?? "–"} / ${apiData?.krx?.rim?.pbr ?? "–"}`;
+  document.getElementById("rimRoe").textContent = rim.roePct.toFixed(1) + "%";
+  document.getElementById("rimRf").textContent = rim.riskFreeRate.toFixed(2) + "%";
+
+  document.getElementById("rimTable").innerHTML = `
+    <h4>리스크프리미엄별 적정가 (g=${rim.g.toFixed(1)}%)</h4>
+    <table><thead><tr><th>ROE</th>${rim.riskPremiumGrid.map(rp=>`<th class="num">RP ${rp.toFixed(1)}%</th>`).join("")}</tr></thead>
+      <tbody><tr><td class="mono">${rim.roePct.toFixed(1)}%</td>
+        ${rim.fairValues.map(v=>`<td class="num mono">${v.toLocaleString()}</td>`).join("")}
+      </tr></tbody></table>`;
+
+  const up = rim.upsidePct;
+  document.getElementById("rimSummary").innerHTML = `
+    <div class="item"><b class="mono">${rim.price.toLocaleString()}</b><span>현재가 (${rim.asOf})</span></div>
+    <div class="item"><b class="mono">${rim.avgFairValue.toLocaleString()}</b><span>평균 적정가</span></div>
+    <div class="item"><b class="mono ${up>=0?'up-pos':'up-neg'}">${up>=0?"+":""}${up.toFixed(1)}%</b><span>상승여력</span></div>`;
+}
+
+const chartBase = () => ({
+  responsive:true, maintainAspectRatio:false,
+  plugins:{ legend:{ labels:{ color:cssVar("--muted"), boxWidth:10, font:{size:11} } } },
+  scales:{
+    x:{ ticks:{ color:cssVar("--faint"), maxTicksLimit:7, font:{size:10} }, grid:{ color:"rgba(30,42,68,.5)" } },
+    y:{ ticks:{ color:cssVar("--faint"), font:{size:10} }, grid:{ color:"rgba(30,42,68,.5)" } },
+  },
+});
+function upsert(id, cfg){
+  if (charts[id]) charts[id].destroy();
+  charts[id] = new Chart(document.getElementById(id), cfg);
+}
+
+function renderCharts(){
+  if (!apiData) return;
+  const f = apiData.fred || {}, m = apiData.market || {}, krx = apiData.krx || {};
+
+  if (f.us10y?.history){
+    upsert("chRates", { type:"line",
+      data:{ labels:f.us10y.history.map(p=>p.d),
+        datasets:[{ label:"10Y (%)", data:f.us10y.history.map(p=>p.v), borderColor:cssVar("--blue"), pointRadius:0, borderWidth:1.6, tension:.25 }] },
+      options: chartBase() });
+    const y = f.us10y.value;
+    if (Number.isFinite(y) && y>0)
+      document.getElementById("fedRuleCap").textContent = `현재 10Y ${y.toFixed(2)}% → Fed Rule 적정 PER ${(100/y).toFixed(1)}배`;
+  }
+  if (f.vix?.history){
+    upsert("chVix", { type:"line",
+      data:{ labels:f.vix.history.map(p=>p.d),
+        datasets:[{ label:"VIX", data:f.vix.history.map(p=>p.v), borderColor:cssVar("--yellow"), pointRadius:0, borderWidth:1.6, tension:.25 }] },
+      options: chartBase() });
+  }
+
+  const idxColors = { xlk:cssVar("--blue"), soxx:cssVar("--green"), sp500:cssVar("--muted") };
+  const ds = [];
+  for (const [k, v] of Object.entries(m)){
+    if (!v?.history?.length) continue;
+    const base = v.history[0].v;
+    ds.push({ key:k, label:v.label, data:v.history.map(p=>({x:p.d, y:+(p.v/base*100).toFixed(1)})) });
+  }
+  if (krx.kospiHistory?.length){
+    const base = krx.kospiHistory[0].v;
+    ds.push({ key:"kospi", label:"KOSPI", data: krx.kospiHistory.map(p=>({x:p.d, y:+(p.v/base*100).toFixed(1)})) });
+  }
+  if (ds.length){
+    const labels = ds[0].data.map(p=>p.x);
+    upsert("chIdx", { type:"line",
+      data:{ labels, datasets: ds.map(d=>({ label:d.label, data:d.data.map(p=>p.y),
+        borderColor: idxColors[d.key] || cssVar("--red"), pointRadius:0, borderWidth:1.6, tension:.25 })) },
+      options: chartBase() });
+  }
+}
+
+function renderContrib(rows){
+  const valid = rows.filter(r=>r.pts!==null);
+  const sorted = [...valid].sort((a,b)=>b.contrib-a.contrib);
+  const colorOf = lv => lv==="bull"?cssVar("--green"):lv==="neutral"?cssVar("--yellow"):cssVar("--red");
+  upsert("chContrib", { type:"bar",
+    data:{ labels:sorted.map(r=>r.name),
+      datasets:[{ label:"기여 점수", data:sorted.map(r=>+r.contrib.toFixed(1)),
+        backgroundColor:sorted.map(r=>colorOf(r.lv)+"CC"), borderRadius:4 }] },
+    options:{ ...chartBase(), indexAxis:"y",
+      plugins:{ legend:{ display:false } },
+      scales:{ x:{ ticks:{color:cssVar("--faint"),font:{size:10}}, grid:{color:"rgba(30,42,68,.5)"} },
+               y:{ ticks:{color:cssVar("--muted"),font:{size:10}}, grid:{display:false} } } } });
+}
+
+/* ═══════════════════════════════════════════════
+   데이터 로드 — GitHub Actions가 매일 생성하는 data.json만 읽음
+   ═══════════════════════════════════════════════ */
+function showErrors(errors){
+  const panel = document.getElementById("errPanel");
+  if (!errors || !errors.length){ panel.hidden = true; panel.innerHTML=""; return; }
+  panel.hidden = false;
+  panel.innerHTML = `<b>수집 실패 ${errors.length}건 (해당 지표는 점수 계산에서 자동 제외)</b>` +
+    `<ul>${errors.map(e=>`<li class="mono">${String(e).replace(/</g,"&lt;")}</li>`).join("")}</ul>` +
+    `<div style="margin-top:6px;color:var(--muted)">다음 GitHub Actions 실행(매일 자동 또는 Actions 탭에서 수동 실행)에서 재수집됩니다.</div>`;
+}
+
+async function loadData(){
+  const st = document.getElementById("status");
+  try{
+    const res = await fetch("./data.json", { cache: "no-store" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    apiData = await res.json();
+    st.className = "";
+    st.textContent = `data.json 로드 완료 (${new Date(apiData.updated).toLocaleString("ko-KR")})`;
+    showErrors(apiData.errors);
+    renderCharts(); render();
+  }catch(e){
+    st.className = "err";
+    st.textContent = `data.json 로드 실패 (${e.message}) — collect.py를 먼저 실행하거나 GitHub Actions 로그를 확인하세요.`;
+    apiData = null; render();
+  }
+}
+
+loadData();
+</script>
+</body>
+</html>
